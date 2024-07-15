@@ -357,6 +357,7 @@ def get_user_profile(user_id):
         print(f"Error retrieving user profile: {e}")
         return jsonify({"error": str(e)}), 500
 
+
 @auth.route('/profile/update/<user_id>', methods=['PUT'])
 def update_user_profile(user_id):
     try:

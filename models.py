@@ -20,6 +20,7 @@ class User:
                  professional_skills=None,
                  certification=None,
                  _id=None):
+        self.id = id
         self.username = username
         self.password = password
         self.email = email
@@ -214,35 +215,20 @@ class User:
         return bcrypt.check_password_hash(stored_password, provided_password)
 
     @staticmethod
-    def find_by_email(email):
-        user_data = Config.mongo.db.users.find_one({"email": email})
-        if user_data:
-            return User(
-                username=user_data['username'],
-                password=user_data['password'],
-                email=user_data.get('email'),
-                phone_number=user_data.get('phone_number'),
-                github=user_data.get('github'),
-                linkedin=user_data.get('linkedin'),
-                technical_skills=user_data.get('technical_skills', []),
-                professional_skills=user_data.get('professional_skills', []),
-                certification=user_data.get('certification', {
-                    "organization": None,
-                    "name": None,
-                    "year": None
-                }),
-                _id=str(user_data['_id'])  # Convert ObjectId to string
-            )
-        return None
-
-    @staticmethod
     def find_by_id(user_id):
         try:
-            obj_id = ObjectId(user_id)
-            user_data = Config.mongo.db.users.find_one({"_id": obj_id})
+            print(f"Attempting to find user with user_id: {user_id}")
 
+            # Try to find the user with _id as ObjectId
+            user_data = Config.mongo.db.users.find_one({"_id": ObjectId(user_id)})
+            if not user_data:
+                # If not found, try to find the user with _id as string
+                user_data = Config.mongo.db.users.find_one({"_id": user_id})
+            
             if user_data:
+                print(f"User data found in database: {user_data}")
                 return User(
+                    id=user_data["_id"],
                     username=user_data['username'],
                     password=user_data['password'],
                     email=user_data.get('email'),
@@ -256,7 +242,7 @@ class User:
                         "name": None,
                         "year": None
                     }),
-                    _id=str(user_data['_id'])  # Convert ObjectId to string
+                    _id=str(user_data['_id'])  # Ensure _id is always a string
                 )
             else:
                 print(f"No user found with id {user_id}")
