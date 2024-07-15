@@ -1,7 +1,8 @@
 from flask_pymongo import PyMongo
 from flask_bcrypt import Bcrypt
 from bson import ObjectId
-from flask import session  # Import session from Flask
+from flask import session
+from pymongo import ReturnDocument  # Import session from Flask
 from config import Config  # Import Config class from config.py
 
 mongo = PyMongo()
@@ -75,29 +76,49 @@ class User:
             )
         return None
     def update_profile(self, new_data):
-        # Update attributes based on new data
-        if 'username' in new_data:
-            self.username = new_data['username']
-        if 'password' in new_data:
-            self.password = new_data['password']
-        if 'email' in new_data:
-            self.email = new_data['email']
-        if 'phone_number' in new_data:
-            self.phone_number = new_data['phone_number']
-        if 'github' in new_data:
-            self.github = new_data['github']
-        if 'linkedin' in new_data:
-            self.linkedin = new_data['linkedin']
-        if 'technical_skills' in new_data:
-            self.technical_skills = new_data['technical_skills']
-        if 'professional_skills' in new_data:
-            self.professional_skills = new_data['professional_skills']
-        if 'certification' in new_data:
-            self.certification = new_data['certification']
+        try:
+            # Convert self.id to ObjectId if it's not already
+            if not isinstance(self.id, ObjectId):
+                self.id = ObjectId(self.id)
 
-        # Save the updated user
-        return self.save()
-    
+            update_query = {
+                "$set": {
+                    "email": new_data.get("email", self.email),
+                    "phone_number": new_data.get("phone_number", self.phone_number),
+                    "github": new_data.get("github", self.github),
+                    "linkedin": new_data.get("linkedin", self.linkedin),
+                    "technical_skills": new_data.get("technical_skills", self.technical_skills),
+                    "professional_skills": new_data.get("professional_skills", self.professional_skills),
+                    "certification": new_data.get("certification", self.certification)
+                }
+            }
+
+            # Update user in MongoDB
+            result = Config.mongo.db.users.update_one(
+                {"_id": self.id},
+                update_query
+            )
+
+            if result.modified_count > 0:
+                # Update self attributes from new_data
+                self.email = new_data.get("email", self.email)
+                self.phone_number = new_data.get("phone_number", self.phone_number)
+                self.github = new_data.get("github", self.github)
+                self.linkedin = new_data.get("linkedin", self.linkedin)
+                self.technical_skills = new_data.get("technical_skills", self.technical_skills)
+                self.professional_skills = new_data.get("professional_skills", self.professional_skills)
+                self.certification = new_data.get("certification", self.certification)
+
+                print(f"User profile updated: {new_data}")
+
+                return True
+            else:
+                print(f"User with _id {self.id} not found in the database or no modifications were made.")
+                return False
+
+        except Exception as e:
+            print(f"Error updating user profile: {e}")
+            return False
     def find_by_contact_info(contact_info):
             user_data = Config.mongo.db.users.find_one({
                 "$or": [
@@ -214,21 +235,21 @@ class User:
     def validate_password(stored_password, provided_password):
         return bcrypt.check_password_hash(stored_password, provided_password)
 
-    @staticmethod
     def find_by_id(user_id):
         try:
-            print(f"Attempting to find user with user_id: {user_id}")
-
             # Try to find the user with _id as ObjectId
             user_data = Config.mongo.db.users.find_one({"_id": ObjectId(user_id)})
+            
             if not user_data:
-                # If not found, try to find the user with _id as string
+                # If not found as ObjectId, try to find as string
                 user_data = Config.mongo.db.users.find_one({"_id": user_id})
             
             if user_data:
-                print(f"User data found in database: {user_data}")
+                # Ensure _id is always a string for consistency
+                _id = str(user_data['_id'])
+                
                 return User(
-                    id=user_data["_id"],
+                    id=_id,  # Convert ObjectId to string if necessary
                     username=user_data['username'],
                     password=user_data['password'],
                     email=user_data.get('email'),
@@ -242,7 +263,7 @@ class User:
                         "name": None,
                         "year": None
                     }),
-                    _id=str(user_data['_id'])  # Ensure _id is always a string
+                    _id=_id  # Ensure _id is always a string
                 )
             else:
                 print(f"No user found with id {user_id}")

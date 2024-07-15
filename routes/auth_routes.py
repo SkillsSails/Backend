@@ -260,7 +260,7 @@ def forgot_password_change_password():
         print(f"New password before hashing: {new_password}")
 
         # Find user by email (which acts as the username)
-        user = User.find_by_email(email)
+        user = User.find_by_contact_info(email)
 
         if not user:
             return jsonify({"error": "User not found"}), 404
@@ -361,9 +361,20 @@ def get_user_profile(user_id):
 @auth.route('/profile/update/<user_id>', methods=['PUT'])
 def update_user_profile(user_id):
     try:
+    
+        print(f"Received user_id: {user_id}")
+
+        # Check if user_id is a valid ObjectId
+        if not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid user ID format"}), 400
+
+        # Find user by ID
         user = User.find_by_id(user_id)
+        
         if not user:
+            print(f"User with id {user_id} not found in the database")
             return jsonify({"error": "User not found"}), 404
+
 
         # Extract updated profile data from request
         data = request.get_json()
@@ -371,7 +382,10 @@ def update_user_profile(user_id):
             "email": data.get("email", user.email),
             "phone_number": data.get("phone_number", user.phone_number),
             "github": data.get("github", user.github),
-            "linkedin": data.get("linkedin", user.linkedin)
+            "linkedin": data.get("linkedin", user.linkedin),
+            "technical_skills": data.get("technical_skills", user.technical_skills),
+            "professional_skills": data.get("professional_skills", user.professional_skills),
+            "certification": data.get("certification", user.certification)
         }
 
         # Update user profile
