@@ -331,3 +331,51 @@ def signin():
     except Exception as e:
         print(f"Exception in signin route: {e}")
         return jsonify({"error": "Internal server error"}), 500
+@auth.route('/profile/<user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    try:
+        print(f"Received user_id: {user_id}")
+
+        # Check if user_id is a valid ObjectId
+        if not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid user ID format"}), 400
+
+        # Find user by ID
+        user = User.find_by_id(user_id)
+        
+        if not user:
+            print(f"User with id {user_id} not found in the database")
+            return jsonify({"error": "User not found"}), 404
+
+        # Convert user object to dictionary
+        user_data = user.to_dict()
+        print(f"User data: {user_data}")
+
+        return jsonify(user_data), 200
+
+    except Exception as e:
+        print(f"Error retrieving user profile: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@auth.route('/profile/update/<user_id>', methods=['PUT'])
+def update_user_profile(user_id):
+    try:
+        user = User.find_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Extract updated profile data from request
+        data = request.get_json()
+        new_data = {
+            "email": data.get("email", user.email),
+            "phone_number": data.get("phone_number", user.phone_number),
+            "github": data.get("github", user.github),
+            "linkedin": data.get("linkedin", user.linkedin)
+        }
+
+        # Update user profile
+        user.update_profile(new_data)
+
+        return jsonify({"message": "Profile updated successfully"}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

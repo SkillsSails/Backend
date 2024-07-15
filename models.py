@@ -35,6 +35,19 @@ class User:
         }
         self._id = _id
 
+    def to_dict(self):
+        # Convert object attributes to dictionary
+        return {
+            "id": str(self.id),
+            "username": self.username,
+            "email": self.email,
+            "phone_number": self.phone_number,
+            "github": self.github,
+            "linkedin": self.linkedin,
+            "technical_skills": self.technical_skills,
+            "professional_skills": self.professional_skills,
+            "certification": self.certification,
+        }
     def __str__(self):
         return f"User(_id={self._id}username={self.username}, email={self.email}, phone_number={self.phone_number}, _id={self._id})"
 
@@ -60,7 +73,30 @@ class User:
                 _id=str(user_data['_id'])  # Convert ObjectId to string
             )
         return None
+    def update_profile(self, new_data):
+        # Update attributes based on new data
+        if 'username' in new_data:
+            self.username = new_data['username']
+        if 'password' in new_data:
+            self.password = new_data['password']
+        if 'email' in new_data:
+            self.email = new_data['email']
+        if 'phone_number' in new_data:
+            self.phone_number = new_data['phone_number']
+        if 'github' in new_data:
+            self.github = new_data['github']
+        if 'linkedin' in new_data:
+            self.linkedin = new_data['linkedin']
+        if 'technical_skills' in new_data:
+            self.technical_skills = new_data['technical_skills']
+        if 'professional_skills' in new_data:
+            self.professional_skills = new_data['professional_skills']
+        if 'certification' in new_data:
+            self.certification = new_data['certification']
 
+        # Save the updated user
+        return self.save()
+    
     def find_by_contact_info(contact_info):
             user_data = Config.mongo.db.users.find_one({
                 "$or": [
