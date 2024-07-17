@@ -1,4 +1,4 @@
-from flask import Flask
+from flask import Blueprint, Flask, current_app, send_from_directory
 from config import Config
 from flask_mail import Mail
 from flask_bcrypt import Bcrypt
@@ -33,7 +33,8 @@ def create_app():
     app.config['SESSION_KEY_PREFIX'] = 'session:'
     Session(app)
 
-    # Register blueprints
+
+
     app.register_blueprint(auth, url_prefix='/auth')
 
     @app.route('/')

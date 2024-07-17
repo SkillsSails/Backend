@@ -214,17 +214,17 @@ def signup():
             email = extracted_info.email
             phone_number = extracted_info.phone_number
 
-            hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
             user = User(
                 username=username,
-                password=hashed_password,
+                password=password,  # Pass the plain password here
                 email=email,
                 phone_number=phone_number,
                 github=extracted_info.github,
                 linkedin=extracted_info.linkedin,
                 technical_skills=extracted_info.technical_skills,
                 professional_skills=extracted_info.professional_skills,
-                certification=extracted_info.certification
+                certification=extracted_info.certification,
+                role = 'freelancer'
             )
             user_id = user.save()
 
@@ -234,11 +234,51 @@ def signup():
             return jsonify({
                 "message": "User created successfully",
                 "_id": str(user_id),
-                "username": user.username
+                "username": user.username,
+                "role":user.role
             }), 201
 
         except Exception as e:
             return jsonify({"error": f"Error processing PDF: {str(e)}"}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@auth.route('/signupR', methods=['POST'])
+def signupR():
+    try:
+        # Extract form data from request
+        username = request.form.get('username')
+        password = request.form.get('password')
+
+
+        # Debug output to check form data
+        print(f"Username: {username}, Password: {password}")
+
+        if not username or not password :
+            return jsonify({"error": "Username, password are required"}), 400
+
+        if User.find_by_username(username):
+            return jsonify({"error": "Username already exists"}), 400
+
+        user = User(
+            username=username,
+            password=password,  # Pass the plain password here
+            role='recruiter'  # Assign role as recruiter
+
+            # Add other recruiter-specific fields if needed
+        )
+        user_id = user.save()
+
+        if not user_id:
+            return jsonify({"error": "Failed to create user"}), 500
+
+        return jsonify({
+            "message": "User created successfully",
+            "_id": str(user_id),
+            "username": user.username,
+            "role":user.role
+        }), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -356,6 +396,35 @@ def get_user_profile(user_id):
     except Exception as e:
         print(f"Error retrieving user profile: {e}")
         return jsonify({"error": str(e)}), 500
+
+@auth.route('/signinR', methods=['POST'])
+def signinR():
+    try:
+        data = request.get_json()
+        if not data or 'username' not in data or 'password' not in data:
+            return jsonify({"error": "Invalid input"}), 400
+
+        username = data['username']
+        password = data['password']
+
+        if not username or not password:
+            return jsonify({"error": "Username and password are required"}), 400
+
+        user = User.find_by_username(username)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        if not bcrypt.check_password_hash(user.password, password):
+            return jsonify({"error": "Invalid password"}), 401
+
+        return jsonify({
+            "message": "Sign-in successful",
+            "_id": str(user._id),
+            "username": user.username
+        }), 200
+    except Exception as e:
+        print(f"Exception in signinR route: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @auth.route('/profile/update/<user_id>', methods=['PUT'])

@@ -20,7 +20,9 @@ class User:
                  technical_skills=None,
                  professional_skills=None,
                  certification=None,
+                 role=None,  # Add role attribute
                  _id=None):
+            
         self.id = id
         self.username = username
         self.password = password
@@ -35,6 +37,7 @@ class User:
             "name": None,
             "year": None
         }
+        self.role = role  # Initialize role
         self._id = _id
 
     def to_dict(self):
@@ -49,11 +52,12 @@ class User:
             "technical_skills": self.technical_skills,
             "professional_skills": self.professional_skills,
             "certification": self.certification,
+            "role": self.role  # Add role to dictionary
+
         }
     def __str__(self):
         return f"User(_id={self._id}username={self.username}, email={self.email}, phone_number={self.phone_number}, _id={self._id})"
 
-    @staticmethod
     def find_by_username(username):
         user_data = Config.mongo.db.users.find_one({"username": username})
         if user_data:
@@ -72,6 +76,7 @@ class User:
                     "name": None,
                     "year": None
                 }),
+                role=user_data.get("role"),  # Fix role attribute access
                 _id=str(user_data['_id'])  # Convert ObjectId to string
             )
         return None
@@ -141,6 +146,7 @@ class User:
                         "name": None,
                         "year": None
                     }),
+                     role=user_data.get("role"),  # Fix role attribute access
                     _id=str(user_data['_id'])  # Convert ObjectId to string
                 )
                 print(f"User data: {user.__dict__}")  # Print user data
@@ -155,7 +161,9 @@ class User:
             "linkedin": self.linkedin,
             "technical_skills": self.technical_skills,
             "professional_skills": self.professional_skills,
-            "certification": self.certification
+            "certification": self.certification,
+             "role": self.role  # Add role to user data
+
         }
 
         try:
@@ -263,6 +271,7 @@ class User:
                         "name": None,
                         "year": None
                     }),
+                     role=user_data.get("role"),  # Fix role attribute access
                     _id=_id  # Ensure _id is always a string
                 )
             else:
