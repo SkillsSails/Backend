@@ -5,6 +5,7 @@ from bson import ObjectId
 from flask import session
 from pymongo import ReturnDocument  # Import session from Flask
 from config import Config  # Import Config class from config.py
+from flask import jsonify
 
 mongo = PyMongo()
 bcrypt = Bcrypt()
@@ -316,12 +317,12 @@ class User:
 
 class Job:
     def __init__(self, title=None, description=None, date_posted=None, salary=None, requirements=None, location=None, user_id=None, _id=None):
-        self.title = title
-        self.description = description
+        self.title = title if title is not None else "No title"
+        self.description = description if description is not None else "No description"
         self.date_posted = date_posted if date_posted else datetime.utcnow()
-        self.salary = salary
-        self.requirements = requirements or []
-        self.location = location
+        self.salary = salary if salary is not None else "Not specified"
+        self.requirements = requirements if requirements is not None else []
+        self.location = location if location is not None else "No location"
         self.user_id = user_id
         self._id = _id
 
@@ -379,31 +380,40 @@ class Job:
             return None
 
     @staticmethod
-    def find_by_user_id(user_id):
-        jobs = Config.mongo.db.jobs.find({"user_id": ObjectId(user_id)})
-        return [Job(
-            title=job["title"],
-            description=job["description"],
-            date_posted=job["date_posted"],
-            salary=job["salary"],
-            requirements=job["requirements"],
-            location=job["location"],
-            user_id=job["user_id"],
-            _id=str(job["_id"])
-        ) for job in jobs]
-
-    @staticmethod
     def find_by_id(job_id):
         job_data = Config.mongo.db.jobs.find_one({"_id": ObjectId(job_id)})
         if job_data:
             return Job(
-                title=job_data["title"],
-                description=job_data["description"],
-                date_posted=job_data["date_posted"],
-                salary=job_data["salary"],
-                requirements=job_data["requirements"],
-                location=job_data["location"],
-                user_id=job_data["user_id"],
+                title=job_data.get("title", "No title"),
+                description=job_data.get("description", "No description"),
+                date_posted=Job.parse_date(job_data.get("date_posted")),
+                salary=job_data.get("salary", "Not specified"),
+                requirements=job_data.get("requirements", []),
+                location=job_data.get("location", "No location"),
+                user_id=job_data.get("user_id"),
                 _id=str(job_data["_id"])
             )
         return None
+
+    @staticmethod
+    def find(filter=None):
+        jobs = Config.mongo.db.jobs.find(filter or {})
+        return [Job(
+            title=job.get("title", "No title"),
+            description=job.get("description", "No description"),
+            date_posted=Job.parse_date(job.get("date_posted")),
+            salary=job.get("salary", "Not specified"),
+            requirements=job.get("requirements", []),
+            location=job.get("location", "No location"),
+            user_id=job.get("user_id"),
+            _id=str(job["_id"])
+        ) for job in jobs]
+
+    @staticmethod
+    def parse_date(date_value):
+        if isinstance(date_value, datetime):
+            return date_value
+        try:
+            return datetime.strptime(date_value, "%Y-%m-%dT%H:%M:%S.%fZ")
+        except (ValueError, TypeError):
+            return datetime.utcnow()

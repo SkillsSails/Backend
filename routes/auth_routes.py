@@ -1,38 +1,42 @@
-import traceback
-from flask import Blueprint, request, jsonify, current_app, session
-from models import User, bcrypt,Job
+from bson import ObjectId  # Import ObjectId from bson package
+from flask import Blueprint, Flask, request, jsonify, current_app, session
+from models import User, bcrypt, Job  # Import your models correctly
 from twilio.rest import Client
 from flask_mail import Mail, Message
 import random
 import re
 import os
 import fitz
-from flask_pymongo import PyMongo
-from flask_bcrypt import Bcrypt
-from flask import Flask, jsonify, request, session
 from bson import ObjectId  # Import ObjectId from bson package
 from werkzeug.utils import secure_filename
+
+from flask import Blueprint, jsonify
+from bson import ObjectId
+from models import User, Job
 
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here'  # Required for session management
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/myDatabase'
 
-auth = Blueprint('auth', __name__)  # Define blueprint after necessary imports
-
+auth = Blueprint('auth', __name__)
 # Twilio configuration
 TWILIO_ACCOUNT_SID = 'AC64a0e8f2d4cb5742e2e9066ae86ef03e'
 TWILIO_AUTH_TOKEN = '52c70879d1547a04dbf875cecd5d564a'
 TWILIO_PHONE_NUMBER = '+15736484216'
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 otp_storage = {}
+
+
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}  # Define the set of allowed file extensions
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-# Function to generate OTP
+
+
 # Function to generate OTP
 def generate_otp():
     return random.randint(100000, 999999)
+
 
 def send_otp_phone(phone_number, otp):
     if twilio_client:
@@ -45,7 +49,6 @@ def send_otp_phone(phone_number, otp):
     else:
         return None
 
-# Function to send OTP to email
 
 # Function to send OTP to email
 def send_otp_email(email, otp):
@@ -59,13 +62,16 @@ def send_otp_email(email, otp):
         print(f"Error sending OTP email: {e}")
         raise e
 
+
 # Function to validate phone number format
 def is_valid_phone_number(input_str):
     return re.fullmatch(r'^\d{8}$', input_str) is not None
 
+
 # Function to validate email format
 def is_valid_email(input_str):
     return re.fullmatch(r'[^@]+@[^@]+\.[^@]+', input_str) is not None
+
 
 # Function to send OTP based on contact info type (phone or email)
 def send_otp(contact_info, otp):
@@ -80,12 +86,15 @@ def send_otp(contact_info, otp):
 
 def validate_otp(contact_info, otp_attempt):
     stored_otp = session.get(contact_info)
-    print(f"Validating OTP for {contact_info}. Stored OTP: {stored_otp}, OTP Attempt: {otp_attempt}")  # Debug print
+    print(
+        f"Validating OTP for {contact_info}. Stored OTP: {stored_otp}, OTP Attempt: {otp_attempt}")  # Debug print
     if stored_otp and str(stored_otp) == str(otp_attempt):
         session.pop(contact_info, None)  # Remove OTP from session after successful validation
         session.modified = True  # Ensure the session is saved
         return True
     return False
+
+
 # Function to extract text from PDF
 def extract_information_from_pdf(pdf_file):
     doc = fitz.open(pdf_file)
@@ -94,6 +103,7 @@ def extract_information_from_pdf(pdf_file):
         page = doc.load_page(page_num)
         text += page.get_text()
     return text
+
 
 # Function to extract information from text and populate a User object
 def extract_information(text):
@@ -152,34 +162,33 @@ def extract_information(text):
 def send_otp_route():
     data = request.get_json()
     contact_info = data.get('contact_info')
-    
+
     if not contact_info:
         return jsonify({'error': 'Contact information is required'}), 400
-    
+
     try:
         user = User.find_by_contact_info(contact_info)
-        
+
         if not user:
             return jsonify({'error': 'User not found'}), 404
-        
+
         # Generate OTP
         otp = random.randint(100000, 999999)
-        
+
         # Send OTP
         send_otp(contact_info, otp)
-        
+
         # Save OTP and user info in session
         session['forgot_password_contact_info'] = contact_info
         session['forgot_password_user_id'] = user._id
         session['forgot_password_otp'] = otp
-        
+
         return jsonify({'message': 'OTP sent successfully', 'user_id': user._id}), 200
     except Exception as e:
         print(f"Error sending OTP: {e}")
         return jsonify({'error': 'Failed to send OTP'}), 500
 
 
-# Route to send OTP
 @auth.route('/signup', methods=['POST'])
 def signup():
     try:
@@ -225,7 +234,7 @@ def signup():
                 technical_skills=extracted_info.technical_skills,
                 professional_skills=extracted_info.professional_skills,
                 certification=extracted_info.certification,
-                role = 'freelancer'
+                role='freelancer'
             )
             user_id = user.save()
 
@@ -236,7 +245,7 @@ def signup():
                 "message": "User created successfully",
                 "_id": str(user_id),
                 "username": user.username,
-                "role":user.role
+                "role": user.role
             }), 201
 
         except Exception as e:
@@ -245,6 +254,7 @@ def signup():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+
 @auth.route('/signupR', methods=['POST'])
 def signupR():
     try:
@@ -252,11 +262,10 @@ def signupR():
         username = request.form.get('username')
         password = request.form.get('password')
 
-
         # Debug output to check form data
         print(f"Username: {username}, Password: {password}")
 
-        if not username or not password :
+        if not username or not password:
             return jsonify({"error": "Username, password are required"}), 400
 
         if User.find_by_username(username):
@@ -278,11 +287,12 @@ def signupR():
             "message": "User created successfully",
             "_id": str(user_id),
             "username": user.username,
-            "role":user.role
+            "role": user.role
         }), 201
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
 
 @auth.route('/forgot_password/change_password', methods=['POST'])
 def forgot_password_change_password():
@@ -319,31 +329,25 @@ def forgot_password_change_password():
         return jsonify({"error": "Failed to change password"}), 500
 
 
-
-
 @auth.route('/forgot_password/validate_otp', methods=['POST'])
 def validate_otp_route():
     data = request.get_json()
     contact_info = data.get('contact_info')
     otp_attempt = data.get('otp')
-    
+
     if not contact_info or not otp_attempt:
         return jsonify({'error': 'Contact information and OTP are required'}), 400
-    
+
     # Retrieve stored OTP and user info from session
     stored_user_id = session.get('forgot_password_user_id')
-  
-    
 
-    
     # If OTP is valid, you can proceed with the password reset or any further steps
     # For example, you can set a session flag to indicate OTP validation success
     session['otp_validated'] = True
-    
-    return jsonify({'message': 'OTP validated successfully', 'user_id': stored_user_id,'contact_info':contact_info}), 200
+
+    return jsonify({'message': 'OTP validated successfully', 'user_id': stored_user_id, 'contact_info': contact_info}), 200
 
 
-  
 @auth.route('/signin', methods=['POST'])
 def signin():
     try:
@@ -372,6 +376,8 @@ def signin():
     except Exception as e:
         print(f"Exception in signin route: {e}")
         return jsonify({"error": "Internal server error"}), 500
+
+
 @auth.route('/profile/<user_id>', methods=['GET'])
 def get_user_profile(user_id):
     try:
@@ -383,7 +389,7 @@ def get_user_profile(user_id):
 
         # Find user by ID
         user = User.find_by_id(user_id)
-        
+
         if not user:
             print(f"User with id {user_id} not found in the database")
             return jsonify({"error": "User not found"}), 404
@@ -397,6 +403,7 @@ def get_user_profile(user_id):
     except Exception as e:
         print(f"Error retrieving user profile: {e}")
         return jsonify({"error": str(e)}), 500
+
 
 @auth.route('/signinR', methods=['POST'])
 def signinR():
@@ -430,10 +437,11 @@ def signinR():
         print(f"Exception in signinR route: {e}")
         return jsonify({"error": "Internal server error"}), 500
 
+
 @auth.route('/profile/update/<user_id>', methods=['PUT'])
 def update_user_profile(user_id):
     try:
-    
+
         print(f"Received user_id: {user_id}")
 
         # Check if user_id is a valid ObjectId
@@ -442,11 +450,10 @@ def update_user_profile(user_id):
 
         # Find user by ID
         user = User.find_by_id(user_id)
-        
+
         if not user:
             print(f"User with id {user_id} not found in the database")
             return jsonify({"error": "User not found"}), 404
-
 
         # Extract updated profile data from request
         data = request.get_json()
@@ -466,6 +473,8 @@ def update_user_profile(user_id):
         return jsonify({"message": "Profile updated successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
 @auth.route('/create_job', methods=['POST'])
 def create_job():
     try:
@@ -534,3 +543,39 @@ def get_jobs_by_user(user_id):
     except Exception as e:
         print(f"Error retrieving jobs: {e}")
         return jsonify({"error": "Internal server error"}), 500
+    
+    from flask import Blueprint, request, jsonify, current_app
+
+
+@auth.route('/recommendations/<user_id>', methods=['GET'])
+def recommend_jobs(user_id):
+    try:
+        # Check if user_id is a valid ObjectId
+        if not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid user ID format"}), 400
+
+        # Find user by ID
+        user = User.find_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Check user role to determine access to job requirements
+        if user.role != "freelancer":
+            return jsonify({"error": "Access denied for role: {}".format(user.role)}), 403
+
+        # Combine technical and professional skills
+        user_skills = set(user.technical_skills + user.professional_skills)
+
+        # Find jobs that match the user's skills
+        recommended_jobs = []
+        for job in Job.find():
+            job_requirements = set(job.requirements)
+            # Recommend job if there is any overlap between user's skills and job requirements
+            if user_skills.intersection(job_requirements):
+                recommended_jobs.append(job.to_dict())
+
+        return jsonify({"recommended_jobs": recommended_jobs}), 200
+
+    except Exception as e:
+        print(f"Error recommending jobs: {e}")
+        return jsonify({"error": "Failed to recommend jobs"}), 500
