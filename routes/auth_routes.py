@@ -1,6 +1,6 @@
 import traceback
 from flask import Blueprint, request, jsonify, current_app, session
-from models import User, bcrypt
+from models import User, bcrypt,Job
 from twilio.rest import Client
 from flask_mail import Mail, Message
 import random
@@ -12,6 +12,7 @@ from flask_bcrypt import Bcrypt
 from flask import Flask, jsonify, request, session
 from bson import ObjectId  # Import ObjectId from bson package
 from werkzeug.utils import secure_filename
+
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here'  # Required for session management
@@ -417,6 +418,9 @@ def signinR():
         if not bcrypt.check_password_hash(user.password, password):
             return jsonify({"error": "Invalid password"}), 401
 
+        # Store user ID in session
+        session['user_id'] = str(user._id)
+
         return jsonify({
             "message": "Sign-in successful",
             "_id": str(user._id),
@@ -425,7 +429,6 @@ def signinR():
     except Exception as e:
         print(f"Exception in signinR route: {e}")
         return jsonify({"error": "Internal server error"}), 500
-
 
 @auth.route('/profile/update/<user_id>', methods=['PUT'])
 def update_user_profile(user_id):
@@ -463,3 +466,71 @@ def update_user_profile(user_id):
         return jsonify({"message": "Profile updated successfully"}), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+@auth.route('/create_job', methods=['POST'])
+def create_job():
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"error": "Invalid input"}), 400
+
+        title = data.get('title')
+        description = data.get('description')
+        date_posted = data.get('date_posted')  # Assume ISO format date string or leave it as None
+        salary = data.get('salary')
+        requirements = data.get('requirements', [])  # Default to empty list if not provided
+        location = data.get('location')
+        user_id = data.get('user_id')
+
+        if not title or not description or not user_id:
+            return jsonify({"error": "Title, description, and user ID are required"}), 400
+
+        # Create a new job object
+        job = Job(
+            title=title,
+            description=description,
+            date_posted=date_posted,
+            salary=salary,
+            requirements=requirements,
+            location=location,
+            user_id=user_id
+        )
+
+        # Save the job
+        job_id = job.save()
+
+        if not job_id:
+            return jsonify({"error": "Failed to create job"}), 500
+
+        return jsonify({
+            "message": "Job created successfully",
+            "_id": str(job_id)
+        }), 201
+
+    except Exception as e:
+        print(f"Error creating job: {e}")
+        return jsonify({"error": "Failed to create job"}), 500
+
+@auth.route('/jobs/<user_id>', methods=['GET'])
+def get_jobs_by_user(user_id):
+    try:
+        # Validate user_id format
+        if not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid user ID format"}), 400
+
+        # Fetch user by user_id
+        user = User.find_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Extract jobs from the user's jobs attribute
+        jobs = user.jobs
+        if not jobs:
+            return jsonify({"message": "No jobs assigned"}), 404
+
+        # Convert job references to job details (assuming jobs contain references to Job documents)
+        job_list = [Job.find_by_id(job_id).to_dict() for job_id in jobs]
+        
+        return jsonify(job_list), 200
+    except Exception as e:
+        print(f"Error retrieving jobs: {e}")
+        return jsonify({"error": "Internal server error"}), 500
