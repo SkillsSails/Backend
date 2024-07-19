@@ -1,6 +1,6 @@
 from bson import ObjectId  # Import ObjectId from bson package
 from flask import Blueprint, Flask, request, jsonify, current_app, session
-from models import User, bcrypt, Job  # Import your models correctly
+from models import Review, User, bcrypt, Job  # Import your models correctly
 from twilio.rest import Client
 from flask_mail import Mail, Message
 import random
@@ -12,7 +12,7 @@ from werkzeug.utils import secure_filename
 
 from flask import Blueprint, jsonify
 from bson import ObjectId
-from models import User, Job
+from models import User, Job,Review
 
 
 app = Flask(__name__)
@@ -26,7 +26,6 @@ TWILIO_AUTH_TOKEN = '52c70879d1547a04dbf875cecd5d564a'
 TWILIO_PHONE_NUMBER = '+15736484216'
 twilio_client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 otp_storage = {}
-
 
 def allowed_file(filename):
     ALLOWED_EXTENSIONS = {'pdf', 'doc', 'docx'}  # Define the set of allowed file extensions
@@ -544,8 +543,6 @@ def get_jobs_by_user(user_id):
         print(f"Error retrieving jobs: {e}")
         return jsonify({"error": "Internal server error"}), 500
     
-    from flask import Blueprint, request, jsonify, current_app
-
 
 @auth.route('/recommendations/<user_id>', methods=['GET'])
 def recommend_jobs(user_id):
@@ -579,3 +576,62 @@ def recommend_jobs(user_id):
     except Exception as e:
         print(f"Error recommending jobs: {e}")
         return jsonify({"error": "Failed to recommend jobs"}), 500
+
+@auth.route('/reviews/post', methods=['POST'])
+def add_review():
+    try:
+        data = request.get_json()
+        job_id = data.get('job_id')
+        user_id = data.get('user_id')
+        rating = data.get('rating')
+        comment = data.get('comment')
+
+        if not job_id or not user_id or rating is None:
+            return jsonify({"error": "Missing required fields"}), 400
+
+        if not ObjectId.is_valid(job_id) or not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid ID format"}), 400
+
+        review = Review(
+            job_id=job_id,
+            user_id=user_id,
+            rating=rating,
+            comment=comment
+        )
+
+        review_id = review.save()
+
+        if review_id:
+            return jsonify({"message": "Review added successfully", "review_id": review_id}), 201
+        else:
+            return jsonify({"error": "Failed to add review"}), 500
+
+    except Exception as e:
+        print(f"Error adding review: {e}")
+        return jsonify({"error": "Failed to add review"}), 500
+
+    
+@auth.route('/reviews/top-rated', methods=['GET'])
+def get_top_rated_reviews():
+    try:
+        reviews = Review.find_top_rated()
+        reviews_with_details = []
+
+        for review in reviews:
+            user = User.find_by_id(review.user_id)
+            job = Job.find_by_id(review.job_id)  # Assuming you have a Job model with a find_by_id method
+            if user and job:
+                review_dict = review.to_dict()
+                review_dict['username'] = user.username
+                review_dict['job_title'] = job.title  # Adjust based on your job model attributes
+                review_dict['job_description'] = job.description  # Adjust based on your job model attributes
+                reviews_with_details.append(review_dict)
+
+        return jsonify({"reviews": reviews_with_details}), 200
+
+    except Exception as e:
+        print(f"Error fetching top-rated reviews: {e}")
+        return jsonify({"error": "Failed to fetch top-rated reviews"}), 500
+
+
+

@@ -417,3 +417,99 @@ class Job:
             return datetime.strptime(date_value, "%Y-%m-%dT%H:%M:%S.%fZ")
         except (ValueError, TypeError):
             return datetime.utcnow()
+        
+class Review:
+    def __init__(self, job_id=None, user_id=None, rating=None, comment=None, date=None, _id=None):
+        self.job_id = job_id
+        self.user_id = user_id
+        self.rating = rating
+        self.comment = comment
+        self.date = date if date else datetime.utcnow()
+        self._id = _id
+
+    def to_dict(self):
+        return {
+            "job_id": str(self.job_id),
+            "user_id": str(self.user_id),
+            "rating": self.rating,
+            "comment": self.comment,
+            "date": self.date,
+            "_id": str(self._id)
+        }
+
+    def save(self):
+        review_data = {
+            "job_id": ObjectId(self.job_id),
+            "user_id": ObjectId(self.user_id),
+            "rating": self.rating,
+            "comment": self.comment,
+            "date": self.date
+        }
+
+        try:
+            if self._id:
+                review_id = ObjectId(self._id)
+                result = Config.mongo.db.reviews.update_one(
+                    {"_id": review_id},
+                    {"$set": review_data}
+                )
+                if result.modified_count == 1:
+                    return str(review_id)
+                else:
+                    raise Exception("Failed to update review: Document not modified")
+            else:
+                review_id = Config.mongo.db.reviews.insert_one(review_data).inserted_id
+                self._id = str(review_id)
+                return str(review_id)
+        except Exception as e:
+            print(f"Error saving review: {e}")
+            return None
+
+    @staticmethod
+    def find_by_job_id(job_id):
+        reviews = Config.mongo.db.reviews.find({"job_id": ObjectId(job_id)})
+        return [Review(
+            job_id=review.get("job_id"),
+            user_id=review.get("user_id"),
+            rating=review.get("rating"),
+            comment=review.get("comment"),
+            date=review.get("date"),
+            _id=str(review["_id"])
+        ) for review in reviews]
+
+    @staticmethod
+    def find_by_user_id(user_id):
+        reviews = Config.mongo.db.reviews.find({"user_id": ObjectId(user_id)})
+        return [Review(
+            job_id=review.get("job_id"),
+            user_id=review.get("user_id"),
+            rating=review.get("rating"),
+            comment=review.get("comment"),
+            date=review.get("date"),
+            _id=str(review["_id"])
+        ) for review in reviews]
+
+    @staticmethod
+    def find_by_id(review_id):
+        review_data = Config.mongo.db.reviews.find_one({"_id": ObjectId(review_id)})
+        if review_data:
+            return Review(
+                job_id=review_data.get("job_id"),
+                user_id=review_data.get("user_id"),
+                rating=review_data.get("rating"),
+                comment=review_data.get("comment"),
+                date=review_data.get("date"),
+                _id=str(review_data["_id"])
+            )
+        return None
+    @staticmethod
+    def find_top_rated():
+        reviews = Config.mongo.db.reviews.find().sort("rating", -1)
+        return [Review(
+            job_id=review.get("job_id"),
+            user_id=review.get("user_id"),
+            rating=review.get("rating"),
+            comment=review.get("comment"),
+            date=review.get("date"),
+            _id=str(review["_id"])
+        ) for review in reviews]
