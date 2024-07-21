@@ -577,6 +577,23 @@ def recommend_jobs(user_id):
         print(f"Error recommending jobs: {e}")
         return jsonify({"error": "Failed to recommend jobs"}), 500
 
+@app.route('/jobs', methods=['GET'])
+def get_all_jobs():
+    try:
+        # Fetch all jobs from the database
+        jobs = Job.find_all()  # Replace with actual logic to retrieve all job documents
+
+        # Check if jobs are found
+        if not jobs:
+            return jsonify({"message": "No jobs available"}), 404
+        
+        # Convert job documents to a dictionary list for JSON response
+        job_list = [job.to_dict() for job in jobs]
+
+        return jsonify(job_list), 200
+    except Exception as e:
+        print(f"Error retrieving jobs: {e}")
+        return jsonify({"error": "Internal server error"}), 500
 @auth.route('/reviews/post', methods=['POST'])
 def add_review():
     try:
@@ -634,4 +651,46 @@ def get_top_rated_reviews():
         return jsonify({"error": "Failed to fetch top-rated reviews"}), 500
 
 
+@auth.route('/jobbs/<job_id>', methods=['GET'])
+def get_job_by_id(job_id):
+    try:
+        # Check if job_id is a valid ObjectId
+        if not ObjectId.is_valid(job_id):
+            return jsonify({"error": "Invalid job ID format"}), 400
 
+        # Find job by ID
+        job = Job.find_by_id(job_id)
+
+        if not job:
+            return jsonify({"error": "Job not found"}), 404
+
+        # Convert job object to dictionary
+        job_data = job.to_dict()
+
+        return jsonify(job_data), 200
+
+    except Exception as e:
+        print(f"Error retrieving job: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@auth.route('/users/<user_id>', methods=['GET'])
+def get_user_by_id(user_id):
+    try:
+        # Check if user_id is a valid ObjectId
+        if not ObjectId.is_valid(user_id):
+            return jsonify({"error": "Invalid user ID format"}), 400
+
+        # Find user by ID
+        user = User.find_by_id(user_id)
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Convert user object to dictionary
+        user_data = user.to_dict()
+
+        return jsonify(user_data), 200
+
+    except Exception as e:
+        print(f"Error retrieving user: {e}")
+        return jsonify({"error": str(e)}), 500
