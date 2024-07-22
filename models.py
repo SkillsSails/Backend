@@ -529,6 +529,7 @@ class Review:
         ) for review in reviews]
     
 from bson.objectid import ObjectId
+
 class GithubInfo:
     def __init__(self,
                  user_id=None,
@@ -621,7 +622,8 @@ class GithubInfo:
         # Assuming you have logic here to extract repositories, followers, following, etc.
         # Here's a placeholder for setting these values
         self.username = user.username
-        self.user_url = self.github_url
+        repo = f'https://api.github.com/users/{self.username}/repos'
+        self.user_url = repo
         self.repositories = self.extract_repositories()
         self.followers = self.extract_followers()
         self.following = self.extract_following()
