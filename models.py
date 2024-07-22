@@ -1,14 +1,20 @@
 from datetime import datetime
+from bs4 import BeautifulSoup
 from flask_pymongo import PyMongo
 from flask_bcrypt import Bcrypt
 from bson import ObjectId
-from flask import session
-from pymongo import ReturnDocument  # Import session from Flask
+from flask import Flask, app, session
+from pymongo import MongoClient, ReturnDocument
+import requests  # Import session from Flask
 from config import Config  # Import Config class from config.py
 from flask import jsonify
 
 mongo = PyMongo()
 bcrypt = Bcrypt()
+app = Flask(__name__)
+app.config['MONGO_URI'] = 'mongodb://localhost:27017/myDatabase'
+client = MongoClient(app.config['MONGO_URI'])
+db = client.get_database()
 
 class User:
     def __init__(self,
@@ -24,6 +30,7 @@ class User:
                  certification=None,
                  role=None,
                  jobs=None,
+                 github_info_id=None,  # Add github_info_id attribute
                  _id=None):
         self.id = id
         self.username = username
@@ -41,6 +48,7 @@ class User:
         }
         self.role = role
         self.jobs = jobs or []
+        self.github_info_id = github_info_id  # Add github_info_id attribute
         self._id = _id
 
     def to_dict(self):
@@ -55,7 +63,9 @@ class User:
             "professional_skills": self.professional_skills,
             "certification": self.certification,
             "role": self.role,
-            "jobs": [str(job_id) for job_id in self.jobs]
+            "jobs": [str(job_id) for job_id in self.jobs],
+            "github_info_id": str(self.github_info_id) if self.github_info_id else None  # Add github_info_id to dict
+
         }
 
     def __str__(self):
@@ -82,6 +92,7 @@ class User:
                 }),
                 role=user_data.get("role"),
                 jobs=user_data.get("jobs", []),
+                github_info_id=user_data.get("github_info_id"),  # Get github_info_id from database
                 _id=str(user_data['_id'])
             )
         return None
@@ -99,7 +110,9 @@ class User:
                     "linkedin": new_data.get("linkedin", self.linkedin),
                     "technical_skills": new_data.get("technical_skills", self.technical_skills),
                     "professional_skills": new_data.get("professional_skills", self.professional_skills),
-                    "certification": new_data.get("certification", self.certification)
+                    "certification": new_data.get("certification", self.certification),
+                    "github_info_id": new_data.get("github_info_id", self.github_info_id)  # Update github_info_id
+
                 }
             }
 
@@ -116,6 +129,7 @@ class User:
                 self.technical_skills = new_data.get("technical_skills", self.technical_skills)
                 self.professional_skills = new_data.get("professional_skills", self.professional_skills)
                 self.certification = new_data.get("certification", self.certification)
+                self.github_info_id = new_data.get("github_info_id", self.github_info_id)  # Update github_info_id in instance
 
                 print(f"User profile updated: {new_data}")
 
@@ -438,6 +452,7 @@ class Review:
         }
 
     def save(self):
+        github_info_data = self.to_dict()
         review_data = {
             "job_id": ObjectId(self.job_id),
             "user_id": ObjectId(self.user_id),
@@ -458,7 +473,6 @@ class Review:
                 else:
                     raise Exception("Failed to update review: Document not modified")
             else:
-                review_id = Config.mongo.db.reviews.insert_one(review_data).inserted_id
                 self._id = str(review_id)
                 return str(review_id)
         except Exception as e:
@@ -513,3 +527,140 @@ class Review:
             date=review.get("date"),
             _id=str(review["_id"])
         ) for review in reviews]
+    
+from bson.objectid import ObjectId
+class GithubInfo:
+    def __init__(self,
+                 user_id=None,
+                 username=None,
+                 user_url=None,
+                 repositories=None,
+                 followers=None,
+                 following=None,
+                 starred_repos=None,
+                 _id=None):
+        self.user_id = user_id
+        self.username = username
+        self.user_url = user_url
+        self.repositories = repositories or []
+        self.followers = followers or 0
+        self.following = following or 0
+        self.starred_repos = starred_repos or []
+
+        self._id = _id
+        self.client = MongoClient('mongodb://localhost:27017/')
+        self.db = self.client['myDatabase']
+        self.collection = self.db['github_info']
+
+    def save_info(self):
+        info = {
+            "user_id": ObjectId(self.user_id),
+            "username": self.username,
+            "user_url": self.user_url,
+            "repositories": self.repositories,
+            "followers": self.followers,
+            "following": self.following,
+            "starred_repos": self.starred_repos
+        }
+        if self._id:
+            self.collection.update_one({"_id": self._id}, {"$set": info}, upsert=True)
+        else:
+            self.collection.insert_one(info)
+
+    def to_dict(self):
+        return {
+            "user_id": str(self.user_id),
+            "username": self.username,
+            "user_url": self.user_url,
+            "repositories": self.repositories,
+            "followers": self.followers,
+            "following": self.following,
+            "starred_repos": self.starred_repos
+        }
+
+    @staticmethod
+    def find_by_user_id(user_id):
+        try:
+            client = MongoClient('mongodb://localhost:27017/')
+            db = client['myDatabase']
+            github_info_data = db.github_info.find_one({"user_id": ObjectId(user_id)})
+            if github_info_data:
+                return GithubInfo(
+                    user_id=github_info_data['user_id'],
+                    username=github_info_data.get('username'),
+                    user_url=github_info_data.get('user_url'),
+                    repositories=github_info_data.get('repositories', []),
+                    followers=github_info_data.get('followers', 0),
+                    following=github_info_data.get('following', 0),
+                    starred_repos=github_info_data.get('starred_repos', []),
+                    _id=str(github_info_data['_id'])
+                )
+            return None
+        except Exception as e:
+            print(f"Error finding GitHub info by user ID: {e}")
+            return None
+
+    def scrape_github(self):
+        user = User.find_by_id(self.user_id)
+        if not user:
+            print(f"No user found with ID {self.user_id}")
+            return
+
+        self.github_url = user.github  # Fetching github URL from the User class
+        if not self.github_url:
+            print("No GitHub URL found for the user.")
+            return
+
+        response = requests.get(self.github_url)
+        if response.status_code != 200:
+            print(f"Failed to fetch GitHub page for user {self.username}")
+            return
+
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        # Assuming you have logic here to extract repositories, followers, following, etc.
+        # Here's a placeholder for setting these values
+        self.username = user.username
+        self.user_url = self.github_url
+        self.repositories = self.extract_repositories()
+        self.followers = self.extract_followers()
+        self.following = self.extract_following()
+        self.starred_repos = self.extract_starred_repos()
+
+        self.save_info()
+
+    def extract_repositories(self):
+        # Fetch repositories from GitHub API
+        repos_url = f'https://api.github.com/users/{self.username}/repos'
+        response = requests.get(repos_url)
+        if response.status_code == 200:
+            repos_data = response.json()
+            return [repo['name'] for repo in repos_data]
+        return []
+
+    def extract_followers(self):
+        # Fetch followers count from GitHub API
+        user_url = f'https://api.github.com/users/{self.username}'
+        response = requests.get(user_url)
+        if response.status_code == 200:
+            user_data = response.json()
+            return user_data.get('followers', 0)
+        return 0
+
+    def extract_following(self):
+        # Fetch following count from GitHub API
+        user_url = f'https://api.github.com/users/{self.username}'
+        response = requests.get(user_url)
+        if response.status_code == 200:
+            user_data = response.json()
+            return user_data.get('following', 0)
+        return 0
+
+    def extract_starred_repos(self):
+        # Fetch starred repositories from GitHub API
+        stars_url = f'https://api.github.com/users/{self.username}/starred'
+        response = requests.get(stars_url)
+        if response.status_code == 200:
+            stars_data = response.json()
+            return [repo['name'] for repo in stars_data]
+        return []

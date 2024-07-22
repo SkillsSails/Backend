@@ -1,6 +1,7 @@
 from bson import ObjectId  # Import ObjectId from bson package
 from flask import Blueprint, Flask, request, jsonify, current_app, session
-from models import Review, User, bcrypt, Job  # Import your models correctly
+from pymongo import MongoClient
+from models import GithubInfo, Review, User, bcrypt, Job  # Import your models correctly
 from twilio.rest import Client
 from flask_mail import Mail, Message
 import random
@@ -18,6 +19,9 @@ from models import User, Job,Review
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your_secret_key_here'  # Required for session management
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/myDatabase'
+client = MongoClient(app.config['MONGO_URI'])
+db = client.get_database()
+github_info = GithubInfo(db)
 
 auth = Blueprint('auth', __name__)
 # Twilio configuration
@@ -694,3 +698,36 @@ def get_user_by_id(user_id):
     except Exception as e:
         print(f"Error retrieving user: {e}")
         return jsonify({"error": str(e)}), 500
+
+
+
+# Assuming these are Flask routes
+@auth.route('/scrape_github/<user_id>', methods=['POST'])
+def scrape_github_info(user_id):
+    try:
+        user = User.find_by_id(user_id)
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        github_info = GithubInfo.find_by_user_id(user_id)
+        if not github_info:
+            github_info = GithubInfo(user_id=user_id)
+        
+        # Scrape GitHub data
+        github_info.scrape_github()
+        github_info.save_info()
+
+        return jsonify(github_info.to_dict()), 200
+    except Exception as e:
+        print(f"Error scraping GitHub info: {e}")
+        return jsonify({"error": str(e)}), 500
+
+
+
+@auth.route('/github_info/<user_id>', methods=['GET'])
+def get_github_info(user_id):
+    github_info = GithubInfo.find_by_user_id(user_id)
+    if github_info:
+        return jsonify(github_info.to_dict()), 200
+    else:
+        return jsonify({"error": "GitHub info not found"}), 404
