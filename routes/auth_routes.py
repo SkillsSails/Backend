@@ -1,7 +1,11 @@
+import csv
+from telnetlib import EC
 from bson import ObjectId  # Import ObjectId from bson package
 from flask import Blueprint, Flask, request, jsonify, current_app, session
+import pandas as pd
 from pymongo import MongoClient
-from models import GithubInfo, Review, User, bcrypt, Job  # Import your models correctly
+from config import Config
+from models import GithubInfo, Linkedin, Review, User, bcrypt, Job  # Import your models correctly
 from twilio.rest import Client
 from flask_mail import Mail, Message
 import random
@@ -10,10 +14,24 @@ import os
 import fitz
 from bson import ObjectId  # Import ObjectId from bson package
 from werkzeug.utils import secure_filename
-
+import time
+import requests
 from flask import Blueprint, jsonify
 from bson import ObjectId
 from models import User, Job,Review
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support import expected_conditions as EC
+from flask import jsonify, request
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.common.by import By
+import pandas as pd
+from bs4 import BeautifulSoup
+import time
 
 
 app = Flask(__name__)
@@ -721,8 +739,7 @@ def scrape_github_info(user_id):
     except Exception as e:
         print(f"Error scraping GitHub info: {e}")
         return jsonify({"error": str(e)}), 500
-
-
+        
 
 @auth.route('/github_info/<user_id>', methods=['GET'])
 def get_github_info(user_id):
@@ -731,3 +748,157 @@ def get_github_info(user_id):
         return jsonify(github_info.to_dict()), 200
     else:
         return jsonify({"error": "GitHub info not found"}), 404
+
+def get_job_links(url):
+    chromedriver_path = '/usr/local/bin/chromedriver'
+    service = Service(chromedriver_path)
+    driver = webdriver.Chrome(service=service)
+    driver.implicitly_wait(10)
+    driver.get(url)
+    time.sleep(5)  # Consider using WebDriverWait for better handling
+
+    jobList = driver.find_elements(By.CLASS_NAME, 'base-card__full-link')
+    
+    print(f"Number of job links found: {len(jobList)}")
+    hrefList = [job.get_attribute('href') for job in jobList]
+    
+    driver.quit()
+    return hrefList
+
+def extract_job_details(job_links):
+    job_details = []
+    for link in job_links:
+        try:
+            parts = link.split('-at-')
+            if len(parts) > 1:
+                job_title = parts[0].split('/')[-1].replace('-', ' ')
+                company = parts[1].split('-')[0]
+                job_details.append({"job_title": job_title.strip(), "company": company.strip(), "link": link})
+        except Exception as e:
+            print(f"Error extracting details from link: {link}, error: {e}")
+    
+    return job_details
+def save_to_csv(job_details):
+    try:
+        # Convert job details list of dictionaries to DataFrame
+        df = pd.DataFrame(job_details)
+        
+        # Ensure that there are valid columns in DataFrame
+        if not df.empty and all(col in df.columns for col in ["company", "job_title", "link"]):
+            # Save DataFrame to CSV
+            df.to_csv('recommended_jobs.csv', index=False)
+            print("Job details saved to CSV successfully.")
+        else:
+            print("No valid job details to save.")
+    except Exception as e:
+        print(f"Error saving job details to CSV: {e}")
+@auth.route('/scrape_and_recommend/<user_id>', methods=['GET'])
+def scrape_and_recommend(user_id):
+    url = request.args.get('url')
+    print(f"Received URL: {url}")
+    
+    # Fetch the user's technical skills from the database using the provided user_id
+    user = db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    # Print the user document for debugging
+    print(f"User Document: {user}")
+    
+    # Get the technical skills list
+    technical_skills = user.get('technical_skills', [])
+    print(f"Technical Skills: {technical_skills}")
+    
+    # Clean and format the technical skills list
+    formatted_skills = [skill.strip() for skill in technical_skills if skill.strip()]
+    print(f"Formatted Technical Skills: {formatted_skills}")
+    
+    # Construct the query parameters for the LinkedIn search URL
+    query_params = '+'.join(formatted_skills) if formatted_skills else ''
+    search_url = f"{url}?keywords={query_params}&location=worldwide"
+    print(f"Constructed LinkedIn Search URL: {search_url}")
+    
+    # Scrape job details based on the constructed search URL
+    job_links = get_job_links(search_url)
+    job_details = extract_job_details(job_links)
+    
+    # Save job details to database
+    for detail in job_details:
+        linkedin_job = Linkedin(
+            company=detail.get('company'),
+            job_title=detail.get('job_title'),
+            link=detail.get('link'),
+            user_id=user_id
+        )
+        Linkedin.insert(linkedin_job)
+    
+    return jsonify({
+        "search_url": search_url,
+        "job_links": job_links,
+        "job_details": job_details
+    }), 200
+
+
+
+def get_job_links(url):
+    chromedriver_path = '/usr/local/bin/chromedriver'
+    service = Service(chromedriver_path)
+    driver = webdriver.Chrome(service=service)
+    driver.implicitly_wait(10)
+    driver.get(url)
+    time.sleep(5)  # Consider using WebDriverWait for better handling
+
+    jobList = driver.find_elements(By.CLASS_NAME, 'base-card__full-link')
+    
+    print(f"Number of job links found: {len(jobList)}")
+    hrefList = [job.get_attribute('href') for job in jobList]
+    
+    driver.quit()
+    return hrefList
+
+
+def extract_job_details(job_links):
+    job_details = []
+    for link in job_links:
+        try:
+            parts = link.split('-at-')
+            if len(parts) > 1:
+                job_title = parts[0].split('/')[-1].replace('-', ' ')
+                company = parts[1].split('-')[0]
+                job_details.append({"job_title": job_title.strip(), "company": company.strip(), "link": link})
+        except Exception as e:
+            print(f"Error extracting details from link: {link}, error: {e}")
+    
+    return job_details
+
+
+def save_to_csv(job_details):
+    try:
+        # Convert job details list of dictionaries to DataFrame
+        df = pd.DataFrame(job_details)
+        
+        # Ensure that there are valid columns in DataFrame
+        if not df.empty and all(col in df.columns for col in ["company", "job_title", "link"]):
+            # Save DataFrame to CSV
+            df.to_csv('recommended_jobs.csv', index=False)
+            print("Job details saved to CSV successfully.")
+        else:
+            print("No valid job details to save.")
+    except Exception as e:
+        print(f"Error saving job details to CSV: {e}")
+
+
+        
+def get_technical_skills(user_id):
+    try:
+        if not user_id:
+            return {"error": "user_id is required"}, 400
+        
+        technical_skills = User.get_technical_skills_by_id(user_id)
+        
+        return {"technical_skills": technical_skills}, 200
+    
+    except Exception as e:
+        return {"error": str(e)}, 500
+
+

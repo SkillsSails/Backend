@@ -15,7 +15,9 @@ app = Flask(__name__)
 app.config['MONGO_URI'] = 'mongodb://localhost:27017/myDatabase'
 client = MongoClient(app.config['MONGO_URI'])
 db = client.get_database()
-
+Config.init_app(app)
+Config.mongo.init_app(app)
+Config.bcrypt.init_app(app)
 class User:
     def __init__(self,
                  id=None,
@@ -24,6 +26,7 @@ class User:
                  email=None,
                  phone_number=None,
                  github=None,
+                 linkedin_id=None,  # Store ObjectId reference to LinkedIn
                  linkedin=None,
                  technical_skills=None,
                  professional_skills=None,
@@ -38,6 +41,7 @@ class User:
         self.email = email
         self.phone_number = phone_number
         self.github = github
+        self.linkedin_id = linkedin_id  # Store ObjectId reference to LinkedIn
         self.linkedin = linkedin
         self.technical_skills = technical_skills or []
         self.professional_skills = professional_skills or []
@@ -58,6 +62,7 @@ class User:
             "email": self.email,
             "phone_number": self.phone_number,
             "github": self.github,
+            "linkedin_id": str(self.linkedin_id) if self.linkedin_id else None,  # Add linkedin_id to dict
             "linkedin": self.linkedin,
             "technical_skills": self.technical_skills,
             "professional_skills": self.professional_skills,
@@ -70,7 +75,16 @@ class User:
 
     def __str__(self):
         return f"User(_id={self._id}, username={self.username}, email={self.email}, phone_number={self.phone_number}, _id={self._id})"
-
+    @staticmethod
+    def get_technical_skills_by_id(user_id):
+        try:
+            user_data = Config.mongo.db.users.find_one({"_id": ObjectId(user_id)})
+            if user_data:
+                return user_data.get('technical_skills', [])
+            return []
+        except Exception as e:
+            print(f"Error retrieving technical skills for user_id {user_id}: {e}")
+            return []
     @staticmethod
     def find_by_username(username):
         user_data = Config.mongo.db.users.find_one({"username": username})
@@ -82,6 +96,7 @@ class User:
                 email=user_data.get('email'),
                 phone_number=user_data.get('phone_number'),
                 github=user_data.get('github'),
+                linkedin_id=user_data.get('linkedin_id'),  # Get linkedin_id from database
                 linkedin=user_data.get('linkedin'),
                 technical_skills=user_data.get('technical_skills', []),
                 professional_skills=user_data.get('professional_skills', []),
@@ -91,11 +106,14 @@ class User:
                     "year": None
                 }),
                 role=user_data.get("role"),
+                
                 jobs=user_data.get("jobs", []),
                 github_info_id=user_data.get("github_info_id"),  # Get github_info_id from database
                 _id=str(user_data['_id'])
             )
         return None
+    
+
 
     def update_profile(self, new_data):
         try:
@@ -107,6 +125,7 @@ class User:
                     "email": new_data.get("email", self.email),
                     "phone_number": new_data.get("phone_number", self.phone_number),
                     "github": new_data.get("github", self.github),
+                    "linkedin_id": new_data.get("linkedin_id", self.linkedin_id),  # Update linkedin_id
                     "linkedin": new_data.get("linkedin", self.linkedin),
                     "technical_skills": new_data.get("technical_skills", self.technical_skills),
                     "professional_skills": new_data.get("professional_skills", self.professional_skills),
@@ -269,6 +288,7 @@ class User:
                     email=user_data.get('email'),
                     phone_number=user_data.get('phone_number'),
                     github=user_data.get('github'),
+                    linkedin_id=user_data.get('linkedin_id'),  # Get linkedin_id from database
                     linkedin=user_data.get('linkedin'),
                     technical_skills=user_data.get('technical_skills', []),
                     professional_skills=user_data.get('professional_skills', []),
@@ -452,7 +472,6 @@ class Review:
         }
 
     def save(self):
-        github_info_data = self.to_dict()
         review_data = {
             "job_id": ObjectId(self.job_id),
             "user_id": ObjectId(self.user_id),
@@ -547,11 +566,9 @@ class GithubInfo:
         self.followers = followers or 0
         self.following = following or 0
         self.starred_repos = starred_repos or []
-
         self._id = _id
-        self.client = MongoClient('mongodb://localhost:27017/')
-        self.db = self.client['myDatabase']
-        self.collection = self.db['github_info']
+        # Using Config.mongo for MongoDB configuration
+        self.collection = Config.mongo.db.github_info
 
     def save_info(self):
         info = {
@@ -564,7 +581,7 @@ class GithubInfo:
             "starred_repos": self.starred_repos
         }
         if self._id:
-            self.collection.update_one({"_id": self._id}, {"$set": info}, upsert=True)
+            self.collection.update_one({"_id": ObjectId(self._id)}, {"$set": info}, upsert=True)
         else:
             self.collection.insert_one(info)
 
@@ -582,19 +599,17 @@ class GithubInfo:
     @staticmethod
     def find_by_user_id(user_id):
         try:
-            client = MongoClient('mongodb://localhost:27017/')
-            db = client['myDatabase']
-            github_info_data = db.github_info.find_one({"user_id": ObjectId(user_id)})
+            github_info_data = Config.mongo.db.github_info.find_one({"user_id": ObjectId(user_id)})
             if github_info_data:
                 return GithubInfo(
-                    user_id=github_info_data['user_id'],
+                    user_id=str(github_info_data.get('user_id')),
                     username=github_info_data.get('username'),
                     user_url=github_info_data.get('user_url'),
-                    repositories=github_info_data.get('repositories', []),
-                    followers=github_info_data.get('followers', 0),
-                    following=github_info_data.get('following', 0),
-                    starred_repos=github_info_data.get('starred_repos', []),
-                    _id=str(github_info_data['_id'])
+                    repositories=github_info_data.get('repositories'),
+                    followers=github_info_data.get('followers'),
+                    following=github_info_data.get('following'),
+                    starred_repos=github_info_data.get('starred_repos'),
+                    _id=str(github_info_data.get('_id'))
                 )
             return None
         except Exception as e:
@@ -666,3 +681,49 @@ class GithubInfo:
             stars_data = response.json()
             return [repo['name'] for repo in stars_data]
         return []
+    
+class Linkedin:
+    def __init__(self,
+                 company=None,
+                 job_title=None,
+                 link=None,
+                 user_id=None,  # Add user_id
+                 _id=None):
+        self.company = company
+        self.job_title = job_title
+        self.link = link
+        self.user_id = user_id  # Initialize user_id
+        self._id = _id
+
+    def to_dict(self):
+        return {
+            "company": self.company,
+            "job_title": self.job_title,
+            "link": self.link,
+            "user_id": self.user_id  # Include user_id in dict
+        }
+
+    def __str__(self):
+        return f"Linkedin(_id={self._id}, company={self.company}, job_title={self.job_title}, link={self.link}, user_id={self.user_id})"
+    def insert(linkedin):
+        try:
+            Config.mongo.db.linkedin.insert_one(linkedin.to_dict())
+            print("Job details inserted successfully.")
+        except Exception as e:
+            print(f"Error inserting job details: {e}")
+    @staticmethod
+    def find_by_id(linkedin_id):
+        try:
+            linkedin_data = Config.mongo.db.linkedin.find_one({"_id": ObjectId(linkedin_id)})
+            if linkedin_data:
+                return Linkedin(
+                    company=linkedin_data.get('company'),
+                    job_title=linkedin_data.get('job_title'),
+                    link=linkedin_data.get('link'),
+                    user_id=linkedin_data.get('user_id'),  # Retrieve user_id
+                    _id=str(linkedin_data['_id'])
+                )
+            return None
+        except Exception as e:
+            print(f"Error finding Linkedin by ID: {e}")
+            return None
