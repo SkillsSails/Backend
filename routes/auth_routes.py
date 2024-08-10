@@ -792,6 +792,31 @@ def save_to_csv(job_details):
             print("No valid job details to save.")
     except Exception as e:
         print(f"Error saving job details to CSV: {e}")
+
+
+
+@auth.route('/freelancers', methods=['GET'])
+def get_freelancers():
+ 
+    try:
+        freelancers = db.users.find({"role": "freelancer"}, {
+            "username": 1,
+            "linkedin": 1,
+            "certification": 1,
+            "professional_skills": 1,
+            "technical_skills": 1
+        })
+
+        freelancer_list = []
+        for freelancer in freelancers:
+            freelancer['_id'] = str(freelancer['_id'])  # Convert ObjectId to string
+            freelancer_list.append(freelancer)
+
+        return jsonify(freelancer_list), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+            
 @auth.route('/scrape_and_recommend/<user_id>', methods=['GET'])
 def scrape_and_recommend(user_id):
     url = request.args.get('url')
